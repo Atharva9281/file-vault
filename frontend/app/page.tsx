@@ -120,12 +120,12 @@ export default function Home() {
             <div className="bg-[#fff3e0] rounded-3xl p-10 min-h-[280px] flex flex-col justify-between hover:scale-[1.02] transition-transform duration-300">
               <div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-4">
-                  &lt;2s
+                  AI-Powered
                   <br />
-                  Processing
+                  Intelligence
                 </h3>
                 <p className="text-muted-foreground text-lg">
-                  Lightning-fast document analysis powered by Vertex AI
+                  Intelligent PII detection and automated redaction workflow
                 </p>
               </div>
             </div>
