@@ -56,3 +56,6 @@ next-env.d.ts
 *.key
 
 /docs
+
+# Build configuration with secrets
+cloudbuild.yaml
