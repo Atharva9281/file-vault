@@ -1,0 +1,58 @@
+# Environment files
+.env
+.env.local
+.env*.local
+*.env
+
+# Service account keys and credentials
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!tailwind.config.json
+service-account*.json
+*-key.json
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+*.pem
+*.key
+
+/docs

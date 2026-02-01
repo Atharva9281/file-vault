@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: filevault-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override for local development
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # Mount app directory for hot-reloading during development
+      - ./app:/app/app
+      # Mount service account key if exists
+      - ./service-account-key.json:/app/service-account-key.json:ro
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - filevault-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  filevault-network:
+    driver: bridge
+
+# Note: This docker-compose is for local development only.
+# For production, deploy to Cloud Run using the Dockerfile directly.
+#
+# Usage:
+#   Development: docker-compose up
+#   Production build test: docker-compose up --build
+#   Cleanup: docker-compose down
+#
+# The backend connects to:
+#   - Cloud Storage (GCS) - via service account
+#   - Cloud SQL - via Cloud SQL Connector
+#   - Document AI, Cloud DLP, Vertex AI - via GCP APIs
+#
+# All GCP services require proper authentication via service account key.

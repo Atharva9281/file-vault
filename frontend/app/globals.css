@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+/* File Vault Design System - Warm Fintech SaaS Aesthetic */
+
+@theme {
+  /* Typography */
+  --font-family: 'Inter', system-ui, sans-serif;
+
+  /* Warm cream background for premium feel */
+  --color-background: hsl(40, 40%, 94%);
+  --color-foreground: hsl(220, 15%, 10%);
+
+  /* Cards stay pure white for contrast */
+  --color-card: hsl(0, 0%, 100%);
+  --color-card-foreground: hsl(220, 15%, 10%);
+
+  --color-popover: hsl(0, 0%, 100%);
+  --color-popover-foreground: hsl(220, 15%, 10%);
+
+  /* Primary: Deep slate/charcoal for buttons */
+  --color-primary: hsl(220, 20%, 18%);
+  --color-primary-foreground: hsl(40, 33%, 97%);
+  --color-primary-hover: hsl(220, 20%, 25%);
+
+  /* Accent purple for gradients and highlights */
+  --color-accent-purple: hsl(258, 90%, 66%);
+
+  /* Secondary with warm undertone */
+  --color-secondary: hsl(40, 20%, 94%);
+  --color-secondary-foreground: hsl(220, 15%, 25%);
+
+  /* Muted with warm cream undertone */
+  --color-muted: hsl(40, 20%, 94%);
+  --color-muted-foreground: hsl(220, 9%, 46%);
+
+  --color-accent: hsl(250, 100%, 97%);
+  --color-accent-foreground: hsl(239, 84%, 67%);
+
+  --color-destructive: hsl(0, 84%, 60%);
+  --color-destructive-foreground: hsl(0, 0%, 100%);
+
+  --color-success: hsl(142, 76%, 36%);
+  --color-success-foreground: hsl(0, 0%, 100%);
+
+  --color-warning: hsl(45, 93%, 47%);
+  --color-warning-foreground: hsl(0, 0%, 100%);
+
+  --color-border: hsl(220, 13%, 91%);
+  --color-input: hsl(220, 13%, 91%);
+  --color-ring: hsl(239, 84%, 67%);
+
+  --radius: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+/* Custom Gradient Utilities */
+.gradient-primary {
+  background: linear-gradient(135deg, hsl(220, 20%, 18%) 0%, hsl(220, 15%, 30%) 100%);
+}
+
+.gradient-hero {
+  background: linear-gradient(180deg, hsl(40, 33%, 97%) 0%, hsl(40, 25%, 95%) 100%);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, hsl(220, 20%, 18%) 0%, hsl(220, 15%, 30%) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shadow utilities */
+.shadow-card {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+}
+
+.shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07);
+}
+
+.shadow-lg {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
+}
+
+/* Animation utilities */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* React-PDF custom styles */
+.react-pdf__Page {
+  margin-bottom: 1rem;
+}
+
+.react-pdf__Page__canvas {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.react-pdf__Page__textContent {
+  border-radius: var(--radius);
+}
+
+.react-pdf__Page__annotations {
+  border-radius: var(--radius);
+}
