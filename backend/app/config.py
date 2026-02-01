@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     DB_USER: str
     REGION: str = "us-central1"
     NEXTAUTH_SECRET: str
-    GOOGLE_APPLICATION_CREDENTIALS: str
+    GOOGLE_APPLICATION_CREDENTIALS: str = ""  # Optional - only needed for local dev
     DOCUMENT_AI_PROCESSOR_ID: str
     DOCUMENT_AI_LOCATION: str = "us"
     VERTEX_AI_LOCATION: str = "us-central1"

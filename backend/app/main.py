@@ -17,9 +17,10 @@ from app.services.extraction_service import ExtractionService
 from app.services.logging_service import AuditLoggingService
 from app.storage import document_store
 
-# Set Google Cloud credentials from settings
-# This must be done before any Google Cloud clients are initialized
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
+# Set Google Cloud credentials from settings (only for local development)
+# Cloud Run uses the service account automatically, so this is only needed locally
+if hasattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS') and settings.GOOGLE_APPLICATION_CREDENTIALS:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
 
 # Create FastAPI application instance
