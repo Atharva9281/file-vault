@@ -45,7 +45,7 @@ steps:
         gcloud run services describe file-vault-backend \
           --region=us-central1 \
           --format='value(status.url)' > /workspace/service_url.txt
-        echo "Cloud Run URL: $(cat /workspace/service_url.txt)"
+        echo "Cloud Run URL: $$(cat /workspace/service_url.txt)"
 
   # Update Vercel environment variable with the new URL
   - name: 'gcr.io/cloud-builders/curl'
@@ -55,27 +55,27 @@ steps:
     args:
       - '-c'
       - |
-        SERVICE_URL=$(cat /workspace/service_url.txt)
-        echo "Updating Vercel BACKEND_API_URL to: $SERVICE_URL"
+        SERVICE_URL=$$(cat /workspace/service_url.txt)
+        echo "Updating Vercel BACKEND_API_URL to: $$SERVICE_URL"
 
         # Get existing env var ID (to update instead of create duplicate)
-        ENV_ID=$(curl -s "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}/env" \
+        ENV_ID=$$(curl -s "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}/env" \
           -H "Authorization: Bearer $${VERCEL_TOKEN}" | \
           jq -r '.envs[] | select(.key=="BACKEND_API_URL") | .id' | head -1)
 
-        if [ -n "$ENV_ID" ]; then
+        if [ -n "$$ENV_ID" ]; then
           # Update existing env var
-          curl -X PATCH "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}/env/$ENV_ID" \
+          curl -X PATCH "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}/env/$$ENV_ID" \
             -H "Authorization: Bearer $${VERCEL_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"value\":\"$SERVICE_URL\",\"target\":[\"production\",\"preview\",\"development\"]}"
+            -d "{\"value\":\"$$SERVICE_URL\",\"target\":[\"production\",\"preview\",\"development\"]}"
           echo "✓ Updated existing BACKEND_API_URL in Vercel"
         else
           # Create new env var
           curl -X POST "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}/env" \
             -H "Authorization: Bearer $${VERCEL_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"key\":\"BACKEND_API_URL\",\"value\":\"$SERVICE_URL\",\"type\":\"plain\",\"target\":[\"production\",\"preview\",\"development\"]}"
+            -d "{\"key\":\"BACKEND_API_URL\",\"value\":\"$$SERVICE_URL\",\"type\":\"plain\",\"target\":[\"production\",\"preview\",\"development\"]}"
           echo "✓ Created BACKEND_API_URL in Vercel"
         fi
 
