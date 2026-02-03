@@ -163,7 +163,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # Frontend development server
         "https://localhost:3000",  # Frontend HTTPS (if used)
+        "https://file-vault-phi.vercel.app",  # Production frontend
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",  # All Vercel preview deployments
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
