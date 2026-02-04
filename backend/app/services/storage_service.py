@@ -273,15 +273,48 @@ class StorageService:
             Exception: If signed URL generation fails
         """
         from datetime import timedelta
+        from google.auth import compute_engine
+        from google.auth.transport import requests
+        import google.auth
 
         bucket = self.client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
 
-        # Generate signed URL with expiration
-        url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=expiration_minutes),
-            method="GET"
-        )
+        try:
+            # Try normal signing first (works with service account keys)
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(minutes=expiration_minutes),
+                method="GET"
+            )
+            return url
+        except AttributeError as e:
+            # If credentials don't have a private key (e.g., on Cloud Run),
+            # use IAM signBlob API instead
+            if "private key" in str(e).lower():
+                # Get the service account email from credentials
+                credentials, project = google.auth.default()
 
-        return url
+                # If using compute engine credentials, get the service account email
+                if isinstance(credentials, compute_engine.Credentials):
+                    # Refresh credentials to get the service account email
+                    credentials.refresh(requests.Request())
+                    service_account_email = credentials.service_account_email
+                else:
+                    # For other credential types, try to get the email
+                    service_account_email = credentials.service_account_email if hasattr(credentials, 'service_account_email') else None
+
+                if not service_account_email:
+                    raise Exception("Cannot determine service account email for signing")
+
+                # Use IAM signBlob API to sign the URL
+                url = blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(minutes=expiration_minutes),
+                    method="GET",
+                    service_account_email=service_account_email,
+                    access_token=credentials.token
+                )
+                return url
+            else:
+                raise
