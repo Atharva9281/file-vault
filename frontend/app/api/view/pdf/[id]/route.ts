@@ -21,6 +21,8 @@ export async function GET(
     const { id } = await params;
     const backendToken = createBackendToken(session.user.email);
 
+    console.log(`Fetching PDF for document ${id} from backend: ${BACKEND_URL}/approval/download/${id}`);
+
     // Get the signed URL from backend (download endpoint for approved docs)
     const response = await fetch(`${BACKEND_URL}/approval/download/${id}`, {
       method: "GET",
@@ -31,9 +33,22 @@ export async function GET(
     });
 
     if (!response.ok) {
-      const data = await response.json();
+      const errorText = await response.text();
+      console.error(`Backend error for document ${id}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+      });
+
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { detail: errorText };
+      }
+
       return NextResponse.json(
-        { error: data.detail || "Failed to get document" },
+        { error: errorData.detail || "Failed to get document" },
         { status: response.status }
       );
     }
@@ -64,8 +79,12 @@ export async function GET(
       },
     });
   } catch (error) {
+    console.error("Error in PDF proxy route:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

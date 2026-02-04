@@ -21,6 +21,8 @@ export async function GET(
     const { id } = await params;
     const backendToken = createBackendToken(session.user.email);
 
+    console.log(`Fetching download URL for document ${id} from backend: ${BACKEND_URL}/approval/download/${id}`);
+
     const response = await fetch(`${BACKEND_URL}/approval/download/${id}`, {
       method: "GET",
       headers: {
@@ -32,6 +34,11 @@ export async function GET(
     const data = await response.json();
 
     if (!response.ok) {
+      console.error(`Backend error for document ${id}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        error: data,
+      });
       return NextResponse.json(
         { error: data.detail || "Failed to get download URL" },
         { status: response.status }
@@ -40,8 +47,12 @@ export async function GET(
 
     return NextResponse.json(data);
   } catch (error) {
+    console.error("Error in download URL route:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

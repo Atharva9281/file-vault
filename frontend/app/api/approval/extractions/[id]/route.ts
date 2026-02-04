@@ -40,8 +40,12 @@ export async function GET(
 
     return NextResponse.json(data);
   } catch (error) {
+    console.error("Error in extractions route:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }
