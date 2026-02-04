@@ -1,8 +1,7 @@
 steps:
   # Build the Docker image from the backend directory
   - name: 'gcr.io/cloud-builders/docker'
-    dir: 'backend'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/file-vault-backend', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/file-vault-backend', '-f', 'backend/Dockerfile', 'backend']
 
   # Push the image to Google Container Registry
   - name: 'gcr.io/cloud-builders/docker'
