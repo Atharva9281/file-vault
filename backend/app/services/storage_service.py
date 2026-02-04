@@ -273,8 +273,8 @@ class StorageService:
             Exception: If signed URL generation fails
         """
         from datetime import timedelta
-        from google.auth import compute_engine
-        from google.auth.transport import requests
+        from google.auth import compute_engine, iam
+        from google.auth.transport import requests as auth_requests
         import google.auth
 
         bucket = self.client.bucket(bucket_name)
@@ -295,10 +295,14 @@ class StorageService:
                 # Get the service account email from credentials
                 credentials, project = google.auth.default()
 
+                # Create request object for IAM
+                request = auth_requests.Request()
+
+                # Refresh credentials to get the service account email
+                credentials.refresh(request)
+
                 # If using compute engine credentials, get the service account email
                 if isinstance(credentials, compute_engine.Credentials):
-                    # Refresh credentials to get the service account email
-                    credentials.refresh(requests.Request())
                     service_account_email = credentials.service_account_email
                 else:
                     # For other credential types, try to get the email
@@ -307,13 +311,19 @@ class StorageService:
                 if not service_account_email:
                     raise Exception("Cannot determine service account email for signing")
 
-                # Use IAM signBlob API to sign the URL
+                # Create an IAM signer for signBlob API
+                signing_credentials = iam.Signer(
+                    request=request,
+                    credentials=credentials,
+                    service_account_email=service_account_email
+                )
+
+                # Generate signed URL using IAM-based signing
                 url = blob.generate_signed_url(
                     version="v4",
                     expiration=timedelta(minutes=expiration_minutes),
                     method="GET",
-                    service_account_email=service_account_email,
-                    access_token=credentials.token
+                    credentials=signing_credentials
                 )
                 return url
             else:
