@@ -609,11 +609,17 @@ async def download_document(
         blob_path = path_parts[1]
 
         # Generate signed URL (expires in 15 minutes)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"DEBUG: About to generate signed URL for bucket={bucket_name}, blob={blob_path}")
+
         signed_url = storage_service.generate_signed_url(
             bucket_name,
             blob_path,
             expiration_minutes=15
         )
+
+        logger.error(f"DEBUG: Successfully generated signed URL")
 
         # Log download
         audit_logger = request.app.state.audit_logger
