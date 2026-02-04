@@ -303,12 +303,30 @@ class StorageService:
         service_account_email = credentials.service_account_email
 
         # Calculate expiration timestamp
-        expiration = datetime.utcnow() + timedelta(minutes=expiration_minutes)
-        expiration_timestamp = int(expiration.timestamp())
+        now = datetime.utcnow()
+        expiration = now + timedelta(minutes=expiration_minutes)
+        datestamp = now.strftime('%Y%m%d')
+        timestamp = now.strftime('%Y%m%dT%H%M%SZ')
 
-        # Construct canonical request components
-        canonical_uri = f"/{blob_path}"
-        canonical_query_string = f"X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential={quote(service_account_email)}/{expiration.strftime('%Y%m%d')}/auto/storage/goog4_request&X-Goog-Date={expiration.strftime('%Y%m%dT%H%M%SZ')}&X-Goog-Expires={expiration_minutes * 60}&X-Goog-SignedHeaders=host"
+        # Construct credential scope
+        credential_scope = f"{datestamp}/auto/storage/goog4_request"
+        credential = f"{service_account_email}/{credential_scope}"
+
+        # Construct canonical request components (query params MUST be alphabetically sorted)
+        # URL-encode the blob path (but keep forward slashes)
+        canonical_uri = "/" + "/".join([quote(part, safe='') for part in blob_path.split("/")])
+
+        query_params = {
+            'X-Goog-Algorithm': 'GOOG4-RSA-SHA256',
+            'X-Goog-Credential': credential,
+            'X-Goog-Date': timestamp,
+            'X-Goog-Expires': str(expiration_minutes * 60),
+            'X-Goog-SignedHeaders': 'host'
+        }
+
+        # Sort and encode query parameters
+        canonical_query_string = '&'.join([f"{k}={quote(str(v), safe='')}" for k, v in sorted(query_params.items())])
+
         canonical_headers = f"host:{bucket_name}.storage.googleapis.com\n"
         signed_headers = "host"
 
@@ -316,8 +334,7 @@ class StorageService:
         canonical_request = f"GET\n{canonical_uri}\n{canonical_query_string}\n{canonical_headers}\n{signed_headers}\nUNSIGNED-PAYLOAD"
 
         # Create string to sign
-        credential_scope = f"{expiration.strftime('%Y%m%d')}/auto/storage/goog4_request"
-        string_to_sign = f"GOOG4-RSA-SHA256\n{expiration.strftime('%Y%m%dT%H%M%SZ')}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}"
+        string_to_sign = f"GOOG4-RSA-SHA256\n{timestamp}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}"
 
         # Use IAM signBlob API to sign
         iam_client = iam_credentials_v1.IAMCredentialsClient(credentials=credentials)
