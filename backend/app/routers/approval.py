@@ -635,6 +635,11 @@ async def download_document(
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating download URL: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate download URL: {str(e)}"
