@@ -260,6 +260,7 @@ class StorageService:
     ) -> str:
         """
         Generate a signed URL for file download.
+        Works both locally (with service account key) and on Cloud Run (using IAM signBlob).
 
         Args:
             bucket_name: Name of the bucket
@@ -272,59 +273,64 @@ class StorageService:
         Raises:
             Exception: If signed URL generation fails
         """
-        from datetime import timedelta
-        from google.auth import compute_engine, iam
-        from google.auth.transport import requests as auth_requests
+        from datetime import datetime, timedelta
+        from urllib.parse import quote
+        import hashlib
+        import binascii
         import google.auth
-
-        bucket = self.client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
+        from google.auth.transport import requests as auth_requests
+        from google.cloud import iam_credentials_v1
 
         try:
-            # Try normal signing first (works with service account keys)
+            # Try standard method first (works with service account keys locally)
+            bucket = self.client.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
+
             url = blob.generate_signed_url(
                 version="v4",
                 expiration=timedelta(minutes=expiration_minutes),
                 method="GET"
             )
             return url
-        except AttributeError as e:
-            # If credentials don't have a private key (e.g., on Cloud Run),
-            # use IAM signBlob API instead
-            if "private key" in str(e).lower():
-                # Get the service account email from credentials
-                credentials, project = google.auth.default()
+        except AttributeError:
+            # No private key - use IAM signBlob API (for Cloud Run)
+            pass
 
-                # Create request object for IAM
-                request = auth_requests.Request()
+        # Get credentials and service account email
+        credentials, project = google.auth.default()
+        auth_request = auth_requests.Request()
+        credentials.refresh(auth_request)
+        service_account_email = credentials.service_account_email
 
-                # Refresh credentials to get the service account email
-                credentials.refresh(request)
+        # Calculate expiration timestamp
+        expiration = datetime.utcnow() + timedelta(minutes=expiration_minutes)
+        expiration_timestamp = int(expiration.timestamp())
 
-                # If using compute engine credentials, get the service account email
-                if isinstance(credentials, compute_engine.Credentials):
-                    service_account_email = credentials.service_account_email
-                else:
-                    # For other credential types, try to get the email
-                    service_account_email = credentials.service_account_email if hasattr(credentials, 'service_account_email') else None
+        # Construct canonical request components
+        canonical_uri = f"/{blob_path}"
+        canonical_query_string = f"X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential={quote(service_account_email)}/{expiration.strftime('%Y%m%d')}/auto/storage/goog4_request&X-Goog-Date={expiration.strftime('%Y%m%dT%H%M%SZ')}&X-Goog-Expires={expiration_minutes * 60}&X-Goog-SignedHeaders=host"
+        canonical_headers = f"host:{bucket_name}.storage.googleapis.com\n"
+        signed_headers = "host"
 
-                if not service_account_email:
-                    raise Exception("Cannot determine service account email for signing")
+        # Construct canonical request
+        canonical_request = f"GET\n{canonical_uri}\n{canonical_query_string}\n{canonical_headers}\n{signed_headers}\nUNSIGNED-PAYLOAD"
 
-                # Create an IAM signer for signBlob API
-                signing_credentials = iam.Signer(
-                    request=request,
-                    credentials=credentials,
-                    service_account_email=service_account_email
-                )
+        # Create string to sign
+        credential_scope = f"{expiration.strftime('%Y%m%d')}/auto/storage/goog4_request"
+        string_to_sign = f"GOOG4-RSA-SHA256\n{expiration.strftime('%Y%m%dT%H%M%SZ')}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}"
 
-                # Generate signed URL using IAM-based signing
-                url = blob.generate_signed_url(
-                    version="v4",
-                    expiration=timedelta(minutes=expiration_minutes),
-                    method="GET",
-                    credentials=signing_credentials
-                )
-                return url
-            else:
-                raise
+        # Use IAM signBlob API to sign
+        iam_client = iam_credentials_v1.IAMCredentialsClient(credentials=credentials)
+        service_account_path = f"projects/-/serviceAccounts/{service_account_email}"
+
+        response = iam_client.sign_blob(
+            name=service_account_path,
+            payload=string_to_sign.encode()
+        )
+
+        signature = binascii.hexlify(response.signed_blob).decode()
+
+        # Construct final signed URL
+        signed_url = f"https://{bucket_name}.storage.googleapis.com{canonical_uri}?{canonical_query_string}&X-Goog-Signature={signature}"
+
+        return signed_url

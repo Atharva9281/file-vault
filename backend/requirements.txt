@@ -9,6 +9,7 @@ google-cloud-documentai>=2.24.0
 google-cloud-aiplatform==1.68.0
 google-cloud-secret-manager>=2.18.0
 google-cloud-logging==3.10.0
+google-cloud-iam>=2.12.0
 cloud-sql-python-connector[pg8000]>=1.7.0
 pg8000>=1.30.5
 sqlalchemy>=2.0.23
