@@ -52,7 +52,9 @@ database_service = DatabaseService(
 
 extraction_service = ExtractionService(
     project_id=settings.PROJECT_ID,
-    location=settings.VERTEX_AI_LOCATION
+    location=settings.VERTEX_AI_LOCATION,
+    docai_processor_id=settings.DOCUMENT_AI_PROCESSOR_ID,
+    docai_location=settings.DOCUMENT_AI_LOCATION
 )
 
 audit_logger = AuditLoggingService(project_id=settings.PROJECT_ID)
