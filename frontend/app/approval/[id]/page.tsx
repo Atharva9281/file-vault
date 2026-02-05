@@ -169,7 +169,6 @@ export default function Approval({
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
               setExtractionStatus('failed');
-              setExtractionError('Extraction timeout - took longer than 60 seconds');
               toast.error('Extraction timeout');
 
               // Redirect to view page on timeout
@@ -184,9 +183,7 @@ export default function Approval({
       }
     } catch (err) {
       // Don't stop the flow on extraction errors
-      if (err instanceof ApiError && err.status !== 404) {
-        setExtractionError('Failed to load extraction data');
-      }
+      // Errors will be shown on the view page
     }
   }, [id, router, hasRedirected]);
 
