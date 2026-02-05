@@ -190,6 +190,11 @@ class ExtractionService:
             result = self.docai_client.process_document(request=request)
             document = result.document
 
+            # Log OCR text for debugging (first 2000 chars)
+            ocr_preview = document.text[:2000] if len(document.text) > 2000 else document.text
+            print(f"[DEBUG] Document AI OCR Text Preview (first 2000 chars):\n{ocr_preview}\n")
+            print(f"[DEBUG] Total OCR text length: {len(document.text)} characters")
+
             # Return extracted text
             return document.text
 
@@ -210,6 +215,10 @@ class ExtractionService:
         for attempt in range(max_retries):
             try:
                 response = self.model.generate_content(prompt)
+
+                # Log Gemini response for debugging
+                print(f"[DEBUG] Gemini raw response:\n{response.text}\n")
+
                 return response
             except Exception as e:
                 error_str = str(e)
@@ -314,14 +323,22 @@ IMPORTANT INSTRUCTIONS:
 FIELDS TO EXTRACT:
 
 1. filing_status (string):
-   - Look for the "Filing Status" section near the top
-   - Find which option is marked or checked
-   - Return the filing status exactly as written
+   - Look for the "Filing Status" section near the top of the form
+   - Common options: "Single", "Married filing jointly", "Married filing separately", "Head of household", "Qualifying surviving spouse"
+   - The checkbox mark (☑ or X) might not OCR well, so look for:
+     * Text that appears AFTER a checkbox mark or X
+     * Lines with "Single", "Married", "Head of household" keywords
+     * Any indication of which filing status was selected
+   - If you cannot determine which box is checked, return null
+   - Return the filing status text exactly as written (capitalization matters)
 
 2. w2_wages (number):
-   - Look for Line 1a: "Total amount from Form(s) W-2, box 1" or "Wages, salaries, tips"
-   - This is in the "Income" section
-   - Extract the dollar amount as a number
+   - Look for Line 1a, Line 1, or Line 1a-c: related to W-2 wages
+   - Common labels: "Wages, salaries, tips", "Total amount from Form(s) W-2", "W-2 wages"
+   - This is usually the FIRST line in the Income section
+   - The amount is typically large (e.g., 50,000 to 200,000)
+   - Look for numbers near these keywords: "W-2", "wages", "salaries", "Line 1"
+   - Extract the dollar amount as a number (remove $, commas)
 
 3. total_deductions (number):
    - Look for Line 12e: "Standard deduction or itemized deductions" or similar text
@@ -391,6 +408,9 @@ Now extract these 5 fields from the OCR text above. Return ONLY the JSON object.
                 "ira_distributions_total": self._to_float(fields.get("ira_distributions_total")),
                 "capital_gain_or_loss": self._to_float(fields.get("capital_gain_or_loss"))
             }
+
+            # Log parsed result for debugging
+            print(f"[DEBUG] Parsed extraction result: {result}")
 
             return result
 
