@@ -82,10 +82,9 @@ export default function Approval({
         setError('Document has not been redacted yet. Please wait for redaction to complete.');
       } else if (docData.status === 'approved') {
         // Document is already approved, redirect to view page
-        // But only if we're not in the middle of approval process
-        if (!isProcessing && !hasRedirected) {
-          router.push(`/view/${id}`);
-        }
+        // Only redirect on initial page load (when coming directly to this URL)
+        // Don't redirect during the approval flow (extraction handles that)
+        router.push(`/view/${id}`);
         return;
       }
     } catch (err) {
@@ -97,7 +96,7 @@ export default function Approval({
     } finally {
       setLoading(false);
     }
-  }, [id, router, isProcessing, hasRedirected]);
+  }, [id, router]);
 
   useEffect(() => {
     if (id) {
