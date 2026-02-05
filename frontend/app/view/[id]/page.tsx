@@ -254,26 +254,17 @@ export default function ViewDocument({
               </div>
             </div>
 
-            {/* Tax Extraction Card */}
-            {extractionData && (
+            {/* Tax Extraction Card - Always show for approved documents */}
+            {document?.status === 'approved' && (
               <ExtractionCard
-                extractedFields={extractionData}
-                extractedAt={document?.extracted_at}
-                status={extractionStatus}
-                error={extractionError || undefined}
-              />
-            )}
-
-            {/* Show extraction card for non-completed states as well */}
-            {!extractionData && extractionStatus !== 'not_started' && (
-              <ExtractionCard
-                extractedFields={{
+                extractedFields={extractionData || {
                   filing_status: null,
                   w2_wages: null,
                   total_deductions: null,
                   ira_distributions_total: null,
                   capital_gain_or_loss: null,
                 }}
+                extractedAt={document?.extracted_at}
                 status={extractionStatus}
                 error={extractionError || undefined}
               />

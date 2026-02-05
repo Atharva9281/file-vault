@@ -50,6 +50,7 @@ export default function Approval({
   const [extractionStatus, setExtractionStatus] = useState<'extracting' | 'completed' | 'failed' | 'not_started'>('not_started');
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   const loadPreview = useCallback(async () => {
     try {
@@ -80,8 +81,11 @@ export default function Approval({
       } else if (docData.status === 'uploaded') {
         setError('Document has not been redacted yet. Please wait for redaction to complete.');
       } else if (docData.status === 'approved') {
-        // Document is already approved, redirect immediately to view page
-        router.push(`/view/${id}`);
+        // Document is already approved, redirect to view page
+        // But only if we're not in the middle of approval process
+        if (!isProcessing && !hasRedirected) {
+          router.push(`/view/${id}`);
+        }
         return;
       }
     } catch (err) {
@@ -93,7 +97,7 @@ export default function Approval({
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, isProcessing, hasRedirected]);
 
   useEffect(() => {
     if (id) {
@@ -127,8 +131,16 @@ export default function Approval({
           pollingIntervalRef.current = null;
         }
 
-        // Redirect immediately to view page
-        router.push(`/view/${id}`);
+        // Show success message and redirect after delay
+        if (!hasRedirected) {
+          setHasRedirected(true);
+          toast.success('Tax fields extracted successfully!');
+
+          // Wait 1 second so user sees the success message
+          setTimeout(() => {
+            router.push(`/view/${id}`);
+          }, 1000);
+        }
       } else if (extraction.status === 'failed') {
         setExtractionError(extraction.error || 'Extraction failed');
         toast.error('Tax field extraction failed');
@@ -139,8 +151,14 @@ export default function Approval({
           pollingIntervalRef.current = null;
         }
 
-        // Redirect immediately to view page even on failure
-        router.push(`/view/${id}`);
+        // Redirect to view page after delay even on failure
+        if (!hasRedirected) {
+          setHasRedirected(true);
+
+          setTimeout(() => {
+            router.push(`/view/${id}`);
+          }, 1000);
+        }
       } else if (extraction.status === 'extracting') {
         // Start polling if not already polling
         if (!pollingIntervalRef.current) {
@@ -157,8 +175,13 @@ export default function Approval({
               setExtractionError('Extraction timeout - took longer than 60 seconds');
               toast.error('Extraction timeout');
 
-              // Redirect immediately to view page
-              router.push(`/view/${id}`);
+              // Redirect to view page after delay
+              if (!hasRedirected) {
+                setHasRedirected(true);
+                setTimeout(() => {
+                  router.push(`/view/${id}`);
+                }, 1000);
+              }
             }
           }, 60000);
         }
@@ -169,7 +192,7 @@ export default function Approval({
         setExtractionError('Failed to load extraction data');
       }
     }
-  }, [id, router]);
+  }, [id, router, hasRedirected]);
 
   const handleApprove = useCallback(async () => {
     if (!document) return;

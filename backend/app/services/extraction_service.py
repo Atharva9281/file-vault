@@ -153,7 +153,9 @@ FIELDS TO EXTRACT:
    - Extract the dollar amount as a number
 
 4. ira_distributions_total (number):
-   - Look for Line 4b: "IRA distributions - Taxable amount"
+   - Look for Line 4a or 4b: "IRA distributions"
+   - Line 4a shows total distributions, Line 4b shows taxable amount
+   - Prefer Line 4a if both are present, otherwise use Line 4b
    - This is in the "Income" section
    - Extract the dollar amount as a number
 
