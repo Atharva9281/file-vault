@@ -15,7 +15,6 @@ import { signOut } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { ExtractionCard } from '@/components/ExtractionCard';
 
 // Dynamic import to avoid SSR issues with react-pdf
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
@@ -44,13 +43,13 @@ export default function Approval({
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
 
-  // Extraction state - shown after approval
-  const [showExtraction, setShowExtraction] = useState(false);
-  const [extractionData, setExtractionData] = useState<any>(null);
+  // Extraction state - for background extraction
   const [extractionStatus, setExtractionStatus] = useState<'extracting' | 'completed' | 'failed' | 'not_started'>('not_started');
-  const [extractionError, setExtractionError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [hasRedirected, setHasRedirected] = useState(false);
+
+  // Ref to track redirect state in loadPreview
+  const hasRedirectedRef = useRef(false);
 
   const loadPreview = useCallback(async () => {
     try {
@@ -81,10 +80,11 @@ export default function Approval({
       } else if (docData.status === 'uploaded') {
         setError('Document has not been redacted yet. Please wait for redaction to complete.');
       } else if (docData.status === 'approved') {
-        // Document is already approved, redirect to view page
-        // Only redirect on initial page load (when coming directly to this URL)
-        // Don't redirect during the approval flow (extraction handles that)
-        router.push(`/view/${id}`);
+        // Document is already approved
+        // Only redirect if we haven't already redirected from extraction flow
+        if (!hasRedirectedRef.current) {
+          router.push(`/view/${id}`);
+        }
         return;
       }
     } catch (err) {
@@ -98,11 +98,17 @@ export default function Approval({
     }
   }, [id, router]);
 
+  // Sync ref with state
+  useEffect(() => {
+    hasRedirectedRef.current = hasRedirected;
+  }, [hasRedirected]);
+
   useEffect(() => {
     if (id) {
       loadPreview();
     }
-  }, [id, loadPreview]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]); // Only run when ID changes, not when loadPreview changes
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -121,27 +127,21 @@ export default function Approval({
       setExtractionStatus(extraction.status);
 
       if (extraction.status === 'completed' && extraction.extracted_fields) {
-        setExtractionData(extraction.extracted_fields);
-        setExtractionError(null);
-
         // Stop polling if it's running
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
 
-        // Show success message and redirect after delay
+        // Extraction complete - redirect immediately
         if (!hasRedirected) {
           setHasRedirected(true);
-          toast.success('Tax fields extracted successfully!');
+          hasRedirectedRef.current = true; // Update ref immediately
 
-          // Wait 1 second so user sees the success message
-          setTimeout(() => {
-            router.push(`/view/${id}`);
-          }, 1000);
+          // Redirect immediately to view page
+          router.push(`/view/${id}`);
         }
       } else if (extraction.status === 'failed') {
-        setExtractionError(extraction.error || 'Extraction failed');
         toast.error('Tax field extraction failed');
 
         // Stop polling if it's running
@@ -150,13 +150,11 @@ export default function Approval({
           pollingIntervalRef.current = null;
         }
 
-        // Redirect to view page after delay even on failure
+        // Redirect to view page even on failure
         if (!hasRedirected) {
           setHasRedirected(true);
-
-          setTimeout(() => {
-            router.push(`/view/${id}`);
-          }, 1000);
+          hasRedirectedRef.current = true; // Update ref immediately
+          router.push(`/view/${id}`);
         }
       } else if (extraction.status === 'extracting') {
         // Start polling if not already polling
@@ -174,12 +172,11 @@ export default function Approval({
               setExtractionError('Extraction timeout - took longer than 60 seconds');
               toast.error('Extraction timeout');
 
-              // Redirect to view page after delay
+              // Redirect to view page on timeout
               if (!hasRedirected) {
                 setHasRedirected(true);
-                setTimeout(() => {
-                  router.push(`/view/${id}`);
-                }, 1000);
+                hasRedirectedRef.current = true; // Update ref immediately
+                router.push(`/view/${id}`);
               }
             }
           }, 60000);
@@ -204,15 +201,14 @@ export default function Approval({
 
       toast.success('Document approved! Extracting tax fields...');
 
-      // Stop processing and show extraction card
-      setIsProcessing(false);
-      setShowExtraction(true);
+      // Keep processing state to show loading
+      // Don't show extraction card, just wait for extraction to complete
       setExtractionStatus('extracting');
 
-      // Wait a moment, then start polling for extraction
+      // Start polling for extraction immediately
       setTimeout(() => {
         loadExtraction();
-      }, 1000);
+      }, 500);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`Approval failed: ${err.message}`);
@@ -474,37 +470,19 @@ export default function Approval({
             </div>
 
             {/* Warning */}
-            {!showExtraction && (
-              <div className="bg-red-500 rounded-xl p-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <span className="text-xl">⚠️</span>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-white">
-                      <strong>Important:</strong> Approving this document will move it to your secure vault.
-                      Rejecting will permanently delete it.
-                    </p>
-                  </div>
+            <div className="bg-red-500 rounded-xl p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <span className="text-xl">⚠️</span>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-white">
+                    <strong>Important:</strong> Approving this document will move it to your secure vault.
+                    Rejecting will permanently delete it.
+                  </p>
                 </div>
               </div>
-            )}
-
-            {/* Tax Extraction Card - shown after approval */}
-            {showExtraction && (
-              <ExtractionCard
-                extractedFields={extractionData || {
-                  filing_status: null,
-                  w2_wages: null,
-                  total_deductions: null,
-                  ira_distributions_total: null,
-                  capital_gain_or_loss: null,
-                }}
-                extractedAt={document?.extracted_at}
-                status={extractionStatus}
-                error={extractionError || undefined}
-              />
-            )}
+            </div>
 
           </div>
         </div>
