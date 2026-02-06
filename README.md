@@ -341,12 +341,6 @@ Once the backend is running, visit:
 
 ---
 
-## License
-
-MIT License - See LICENSE file for details
-
----
-
 ## Acknowledgments
 
 - Google Cloud Platform for cloud infrastructure
