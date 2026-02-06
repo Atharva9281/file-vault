@@ -279,17 +279,19 @@ class ExtractionService:
         """
         Extract filing status from OCR text by looking for checkbox patterns.
 
+        STRICT MODE: Only returns a value if we find CLEAR evidence of a checked box.
+        Returns None if no checkbox is clearly marked.
+
         Looks for indicators that a box is checked:
-        - X mark near status option
-        - ☑ or ✓ symbols
-        - Pattern like "[X] Single" or "X Single"
-        - Isolated status option on its own line (often indicates selection)
+        - X mark near status option (e.g., "X Single", "[X] Married filing jointly")
+        - ☑ or ✓ checkmark symbols
+        - Does NOT guess or use defaults
 
         Args:
             ocr_text: OCR text from Document AI
 
         Returns:
-            Filing status string, or None if not found
+            Filing status string if checkbox is clearly marked, None otherwise
         """
         try:
             # Define the 5 valid filing statuses (case-insensitive)
@@ -304,46 +306,24 @@ class ExtractionService:
             # Normalize OCR text for better matching
             text_lower = ocr_text.lower()
 
-            # Pattern 1: Look for "X" or "[X]" immediately before status
+            # ONLY look for explicit checkbox marks (X, ✓, ☑)
+            # Do NOT use line isolation or defaults
             for status in statuses:
                 # Look for X mark patterns
                 patterns = [
-                    rf'[xX✓☑]\s*{re.escape(status.lower())}',  # X Single
-                    rf'\[?\s*[xX✓☑]\s*\]?\s*{re.escape(status.lower())}',  # [X] Single
-                    rf'{re.escape(status.lower())}\s*[xX✓☑]',  # Single X
+                    rf'[xX✓☑✔]\s*{re.escape(status.lower())}',  # X Single, ✓ Single
+                    rf'\[?\s*[xX✓☑✔]\s*\]?\s*{re.escape(status.lower())}',  # [X] Single, [ X ] Single
+                    rf'{re.escape(status.lower())}\s*[xX✓☑✔]',  # Single X
                 ]
 
                 for pattern in patterns:
                     if re.search(pattern, text_lower):
-                        print(f"[DEBUG] Regex found filing status: {status} (checkbox pattern)")
+                        print(f"[DEBUG] Regex found filing status: {status} (checkbox mark detected)")
                         return status
 
-            # Pattern 2: Look for isolated status on its own line
-            # Split OCR text into lines and check which status appears isolated
-            lines = ocr_text.split('\n')
-            for i, line in enumerate(lines):
-                line_clean = line.strip().lower()
-
-                # Check if this line contains exactly one status and nothing else significant
-                for status in statuses:
-                    if status.lower() in line_clean:
-                        # Check if the line is relatively short (likely just the checkbox + status)
-                        if len(line_clean) < 50 and line_clean.count(status.lower()) == 1:
-                            # Make sure other statuses aren't on the same line
-                            other_statuses = [s for s in statuses if s != status]
-                            if not any(other.lower() in line_clean for other in other_statuses):
-                                print(f"[DEBUG] Regex found filing status: {status} (isolated line)")
-                                return status
-
-            # Pattern 3: Default to most common if we find all 5 options listed
-            # This means the form has all options but we can't determine which is selected
-            all_present = all(status.lower() in text_lower for status in statuses)
-            if all_present:
-                print("[DEBUG] Regex found all filing statuses listed but cannot determine selection")
-                print("[DEBUG] Defaulting to 'Married filing jointly' (most common)")
-                return "Married filing jointly"
-
-            print("[DEBUG] Regex could not determine filing status from OCR text")
+            # If we reach here, no checkbox mark was found
+            print("[DEBUG] Regex could not find any checked filing status box")
+            print("[DEBUG] Returning None - user should verify manually")
             return None
 
         except Exception as e:
