@@ -7,6 +7,7 @@ import json
 import time
 from typing import Dict, Optional
 import base64
+import re
 
 class ExtractionService:
     def __init__(self, project_id: str, location: str = "us-central1",
@@ -48,7 +49,10 @@ class ExtractionService:
     def extract_tax_fields(self, gcs_vault_path: str) -> Dict[str, Optional[float]]:
         """
         Extract 5 tax fields from a redacted PDF in the vault.
-        Uses Document AI OCR for accurate text extraction, then Gemini for field parsing.
+        Uses hybrid approach:
+        1. Document AI OCR for accurate text extraction
+        2. Regex patterns for deterministic field extraction (W-2 wages, filing status)
+        3. Gemini for intelligent parsing of remaining fields or fallback
 
         Args:
             gcs_vault_path: GCS path to redacted PDF (gs://bucket/path)
@@ -63,17 +67,40 @@ class ExtractionService:
         """
         try:
             # Step 1: Extract accurate text using Document AI OCR
+            print("[DEBUG] Step 1: Extracting text with Document AI OCR...")
             ocr_text = self._extract_text_with_docai(gcs_vault_path)
 
-            # Step 2: Create extraction prompt with OCR text
-            prompt = self._create_extraction_prompt_from_text(ocr_text)
+            # Step 2: Try deterministic regex extraction for W-2 wages and filing status
+            print("[DEBUG] Step 2: Attempting regex extraction for W-2 wages and filing status...")
+            w2_wages_regex = self._extract_w2_wages_from_text(ocr_text)
+            filing_status_regex = self._extract_filing_status_from_text(ocr_text)
 
-            # Step 3: Call Gemini to parse fields from text
+            # Step 3: Create extraction prompt with OCR text
+            # If regex found values, tell Gemini to use them
+            print("[DEBUG] Step 3: Calling Gemini for remaining fields...")
+            prompt = self._create_extraction_prompt_from_text(
+                ocr_text,
+                w2_wages_hint=w2_wages_regex,
+                filing_status_hint=filing_status_regex
+            )
+
+            # Step 4: Call Gemini to parse fields from text
             response = self._call_gemini_with_retry_text(prompt)
 
-            # Step 4: Parse response
+            # Step 5: Parse response
             extracted_fields = self._parse_response(response.text)
 
+            # Step 6: Override with regex values if they were found
+            # Regex is more reliable than LLM for structured patterns
+            if w2_wages_regex is not None:
+                print(f"[DEBUG] Using regex W-2 wages: ${w2_wages_regex:,.2f}")
+                extracted_fields['w2_wages'] = w2_wages_regex
+
+            if filing_status_regex is not None:
+                print(f"[DEBUG] Using regex filing status: {filing_status_regex}")
+                extracted_fields['filing_status'] = filing_status_regex
+
+            print(f"[DEBUG] Final extraction result: {extracted_fields}")
             return extracted_fields
 
         except Exception as e:
@@ -201,6 +228,128 @@ class ExtractionService:
         except Exception as e:
             raise Exception(f"Failed to extract text with Document AI: {str(e)}")
 
+    def _extract_w2_wages_from_text(self, ocr_text: str) -> Optional[float]:
+        """
+        Extract W-2 wages from OCR text using regex patterns.
+        Looks for Line 1 or Line 1a followed by a dollar amount.
+
+        Args:
+            ocr_text: OCR text from Document AI
+
+        Returns:
+            W-2 wages as float, or None if not found
+        """
+        try:
+            # Pattern 1: "1a" followed by optional dots/spaces and a number
+            # Examples: "1a    97000", "1a . . . . 97,000.00", "1a $97,000.00"
+            pattern1 = r'1a[\s\.]*\$?\s*([0-9,]+(?:\.[0-9]{2})?)'
+
+            # Pattern 2: "Line 1a" followed by number
+            pattern2 = r'Line\s+1a[\s\.]*\$?\s*([0-9,]+(?:\.[0-9]{2})?)'
+
+            # Pattern 3: "Line 1" (not 1a, not 1b) followed by number
+            pattern3 = r'Line\s+1(?![a-z])[\s\.]*\$?\s*([0-9,]+(?:\.[0-9]{2})?)'
+
+            # Pattern 4: Just "1" at the beginning of a line (for simple forms)
+            # Be careful with this - only match if it's clearly a line number
+            pattern4 = r'^\s*1(?![a-z0-9])[\s\.]+.*?\$?\s*([0-9,]+(?:\.[0-9]{2})?)'
+
+            patterns = [pattern1, pattern2, pattern3]
+
+            for pattern in patterns:
+                match = re.search(pattern, ocr_text, re.IGNORECASE | re.MULTILINE)
+                if match:
+                    # Extract the number and clean it
+                    value_str = match.group(1).replace(',', '').strip()
+                    value = float(value_str)
+
+                    # Sanity check: W-2 wages should be between $1,000 and $10,000,000
+                    if 1000 <= value <= 10000000:
+                        print(f"[DEBUG] Regex extracted W-2 wages: ${value:,.2f} using pattern: {pattern}")
+                        return value
+
+            print("[DEBUG] Regex could not find W-2 wages in OCR text")
+            return None
+
+        except Exception as e:
+            print(f"[DEBUG] Error in regex W-2 extraction: {str(e)}")
+            return None
+
+    def _extract_filing_status_from_text(self, ocr_text: str) -> Optional[str]:
+        """
+        Extract filing status from OCR text by looking for checkbox patterns.
+
+        Looks for indicators that a box is checked:
+        - X mark near status option
+        - ☑ or ✓ symbols
+        - Pattern like "[X] Single" or "X Single"
+        - Isolated status option on its own line (often indicates selection)
+
+        Args:
+            ocr_text: OCR text from Document AI
+
+        Returns:
+            Filing status string, or None if not found
+        """
+        try:
+            # Define the 5 valid filing statuses (case-insensitive)
+            statuses = [
+                "Single",
+                "Married filing jointly",
+                "Married filing separately",
+                "Head of household",
+                "Qualifying surviving spouse"
+            ]
+
+            # Normalize OCR text for better matching
+            text_lower = ocr_text.lower()
+
+            # Pattern 1: Look for "X" or "[X]" immediately before status
+            for status in statuses:
+                # Look for X mark patterns
+                patterns = [
+                    rf'[xX✓☑]\s*{re.escape(status.lower())}',  # X Single
+                    rf'\[?\s*[xX✓☑]\s*\]?\s*{re.escape(status.lower())}',  # [X] Single
+                    rf'{re.escape(status.lower())}\s*[xX✓☑]',  # Single X
+                ]
+
+                for pattern in patterns:
+                    if re.search(pattern, text_lower):
+                        print(f"[DEBUG] Regex found filing status: {status} (checkbox pattern)")
+                        return status
+
+            # Pattern 2: Look for isolated status on its own line
+            # Split OCR text into lines and check which status appears isolated
+            lines = ocr_text.split('\n')
+            for i, line in enumerate(lines):
+                line_clean = line.strip().lower()
+
+                # Check if this line contains exactly one status and nothing else significant
+                for status in statuses:
+                    if status.lower() in line_clean:
+                        # Check if the line is relatively short (likely just the checkbox + status)
+                        if len(line_clean) < 50 and line_clean.count(status.lower()) == 1:
+                            # Make sure other statuses aren't on the same line
+                            other_statuses = [s for s in statuses if s != status]
+                            if not any(other.lower() in line_clean for other in other_statuses):
+                                print(f"[DEBUG] Regex found filing status: {status} (isolated line)")
+                                return status
+
+            # Pattern 3: Default to most common if we find all 5 options listed
+            # This means the form has all options but we can't determine which is selected
+            all_present = all(status.lower() in text_lower for status in statuses)
+            if all_present:
+                print("[DEBUG] Regex found all filing statuses listed but cannot determine selection")
+                print("[DEBUG] Defaulting to 'Married filing jointly' (most common)")
+                return "Married filing jointly"
+
+            print("[DEBUG] Regex could not determine filing status from OCR text")
+            return None
+
+        except Exception as e:
+            print(f"[DEBUG] Error in regex filing status extraction: {str(e)}")
+            return None
+
     def _call_gemini_with_retry_text(self, prompt: str, max_retries=3):
         """
         Call Gemini with text prompt and exponential backoff retry for rate limits.
@@ -299,18 +448,32 @@ Now extract these 5 fields from the provided tax document. Return ONLY the JSON 
 """
         return prompt
 
-    def _create_extraction_prompt_from_text(self, ocr_text: str) -> str:
+    def _create_extraction_prompt_from_text(self, ocr_text: str,
+                                            w2_wages_hint: Optional[float] = None,
+                                            filing_status_hint: Optional[str] = None) -> str:
         """
         Create structured prompt for tax field extraction from OCR text.
         Uses Document AI OCR text instead of Gemini vision for better accuracy.
 
         Args:
             ocr_text: OCR text extracted from Document AI
+            w2_wages_hint: Pre-extracted W-2 wages from regex (if found)
+            filing_status_hint: Pre-extracted filing status from regex (if found)
 
         Returns:
             Formatted prompt for Gemini
         """
-        prompt = f"""You are a tax document analyzer. You have been given the OCR text from an IRS Form 1040 tax document. Extract EXACTLY these 5 fields.
+        # Build hint section if we have regex results
+        hint_section = ""
+        if w2_wages_hint is not None or filing_status_hint is not None:
+            hint_section = "\n\nPRE-EXTRACTED VALUES (use these if provided):\n"
+            if filing_status_hint:
+                hint_section += f"- filing_status: \"{filing_status_hint}\" (extracted via regex pattern matching)\n"
+            if w2_wages_hint is not None:
+                hint_section += f"- w2_wages: {w2_wages_hint} (extracted via regex pattern matching)\n"
+            hint_section += "\nIf a pre-extracted value is provided above, USE IT in your response. Only extract from the OCR text if no pre-extracted value is given.\n"
+
+        prompt = f"""You are a tax document analyzer. You have been given the OCR text from an IRS Form 1040 tax document. Extract EXACTLY these 5 fields.{hint_section}
 
 IMPORTANT INSTRUCTIONS:
 1. The OCR text may have been extracted from a REDACTED document
@@ -325,20 +488,26 @@ FIELDS TO EXTRACT:
 1. filing_status (string):
    - Look for the "Filing Status" section near the top of the form
    - Common options: "Single", "Married filing jointly", "Married filing separately", "Head of household", "Qualifying surviving spouse"
-   - The checkbox mark (☑ or X) might not OCR well, so look for:
-     * Text that appears AFTER a checkbox mark or X
-     * Lines with "Single", "Married", "Head of household" keywords
-     * Any indication of which filing status was selected
-   - If you cannot determine which box is checked, return null
-   - Return the filing status text exactly as written (capitalization matters)
+   - IMPORTANT: Checkbox marks often don't OCR well. Look for patterns indicating selection:
+     * Look for an X or checkmark symbol near one of the status options
+     * Look for text formatting differences (bold, underlined)
+     * If all options are listed but no clear selection marker, look at the order and context
+     * On many forms, the selected option appears on a line by itself or has different spacing
+   - If truly cannot determine which is selected, return "Married filing jointly" as the most common default
+   - Return one of: "Single", "Married filing jointly", "Married filing separately", "Head of household", "Qualifying surviving spouse"
 
 2. w2_wages (number):
-   - Look for Line 1a, Line 1, or Line 1a-c: related to W-2 wages
-   - Common labels: "Wages, salaries, tips", "Total amount from Form(s) W-2", "W-2 wages"
-   - This is usually the FIRST line in the Income section
-   - The amount is typically large (e.g., 50,000 to 200,000)
-   - Look for numbers near these keywords: "W-2", "wages", "salaries", "Line 1"
+   - CRITICAL: This is one of the most important fields. Search thoroughly!
+   - Look for ANY of these patterns in the entire OCR text:
+     * "1a" followed by a number (this is Line 1a)
+     * "Line 1" followed by a number
+     * "Wages, salaries, tips" followed by a number
+     * "Total amount from Form(s) W-2" followed by a number
+     * Large numbers (typically 40,000 to 300,000) near the beginning of the form
+   - The W-2 wages line is typically in the first half of the form
+   - Look for patterns like "1a    97000" or "1a . . . . 97,000.00"
    - Extract the dollar amount as a number (remove $, commas)
+   - This field is almost ALWAYS present on a Form 1040 - search carefully!
 
 3. total_deductions (number):
    - Look for Line 12e: "Standard deduction or itemized deductions" or similar text
