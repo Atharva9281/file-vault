@@ -90,15 +90,22 @@ class ExtractionService:
             # Step 5: Parse response
             extracted_fields = self._parse_response(response.text)
 
-            # Step 6: Override with regex values if they were found
+            # Step 6: Override with regex values
             # Regex is more reliable than LLM for structured patterns
+
+            # For W-2 wages: Use regex if found, otherwise keep Gemini's result
             if w2_wages_regex is not None:
                 print(f"[DEBUG] Using regex W-2 wages: ${w2_wages_regex:,.2f}")
                 extracted_fields['w2_wages'] = w2_wages_regex
 
+            # For filing status: ALWAYS trust regex (even if None)
+            # If no checkbox was detected, we want None, not Gemini's guess
             if filing_status_regex is not None:
                 print(f"[DEBUG] Using regex filing status: {filing_status_regex}")
                 extracted_fields['filing_status'] = filing_status_regex
+            else:
+                print("[DEBUG] Regex found no checked filing status box - overriding Gemini with None")
+                extracted_fields['filing_status'] = None
 
             print(f"[DEBUG] Final extraction result: {extracted_fields}")
             return extracted_fields
