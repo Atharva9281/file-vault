@@ -6,7 +6,11 @@ A full-stack cloud-native application built with Next.js and FastAPI, deployed o
 
 ## Demo
 
-**[📹 Watch Demo Video](./demo.mp4)**
+**[📹 Watch Demo Video](./demo.mp4)
+
+https://github.com/user-attachments/assets/e6c2432e-23b6-47e8-b422-74e3d6afaf6e
+
+**
 
 > See the complete workflow in action: document upload, automatic PII redaction, AI-powered field extraction, and secure approval process.
 
