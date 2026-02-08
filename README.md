@@ -4,6 +4,12 @@
 
 A full-stack cloud-native application built with Next.js and FastAPI, deployed on Google Cloud Platform. Features automated sensitive data protection, document approval workflows, and machine learning-based data extraction.
 
+## Demo
+
+<video src="https://github.com/user-attachments/assets/demo.mp4" controls width="100%"></video>
+
+> **Watch the demo** to see the complete workflow: document upload, automatic PII redaction, AI-powered field extraction, and secure approval process.
+
 ---
 
 ## Features
