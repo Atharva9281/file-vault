@@ -7,7 +7,7 @@ import { Navbar } from '@/components/Navbar';
 import { UploadZone } from '@/components/UploadZone';
 import { DocumentCard } from '@/components/DocumentCard';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
-import { getDocuments, downloadDocument as apiDownloadDocument, deleteDocument, syncDocuments } from '@/lib/api';
+import { getDocuments, downloadDocument as apiDownloadDocument, deleteDocument } from '@/lib/api';
 import { FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -21,20 +21,9 @@ export default function Dashboard() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<any>(null);
 
-  // Fetch documents and sync when component mounts
+  // Fetch documents when component mounts
   useEffect(() => {
-    const initializeDashboard = async () => {
-      try {
-        // First sync from GCS to populate in-memory store
-        await syncDocuments();
-      } catch (err) {
-        // Continue even if sync fails
-      }
-      // Then fetch documents
-      fetchDocuments();
-    };
-
-    initializeDashboard();
+    fetchDocuments();
   }, []);
 
   // Auto-redirect to approval page when document is ready
@@ -104,17 +93,6 @@ export default function Dashboard() {
     }
   }, [documentToDelete, fetchDocuments]);
 
-  const handleSync = useCallback(async () => {
-    try {
-      const result = await syncDocuments();
-      toast.success(`Synced ${result.synced_count} documents from storage`);
-      fetchDocuments();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to sync documents';
-      toast.error(errorMsg);
-    }
-  }, [fetchDocuments]);
-
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -140,21 +118,9 @@ export default function Dashboard() {
         <section>
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl font-bold text-foreground">Recent Documents</h2>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleSync}
-                className="text-sm font-semibold text-foreground bg-card hover:bg-muted border border-border transition-all px-4 py-2.5 rounded-full flex items-center gap-2 shadow-sm hover:shadow-md"
-                title="Sync documents from cloud storage"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Sync
-              </button>
-              <span className="text-sm font-medium text-muted-foreground bg-muted px-4 py-2 rounded-full">
-                {documents.length} {documents.length === 1 ? 'document' : 'documents'}
-              </span>
-            </div>
+            <span className="text-sm font-medium text-muted-foreground bg-muted px-4 py-2 rounded-full">
+              {documents.length} {documents.length === 1 ? 'document' : 'documents'}
+            </span>
           </div>
 
           {isLoadingDocuments ? (

@@ -166,36 +166,6 @@ export async function rejectDocument(documentId: string, reason?: string): Promi
   }
 }
 
-/**
- * Sync documents from GCS bucket
- *
- * Useful when documents exist in GCS but not showing in the app
- * (e.g., after server restart)
- *
- * @returns Promise with sync result
- */
-export async function syncDocuments(): Promise<any> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/documents/sync`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to sync documents");
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error("Failed to sync documents");
-  }
-}
 
 /**
  * Test PII detection on a document
