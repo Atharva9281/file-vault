@@ -7,7 +7,8 @@ import os
 import sqlalchemy
 from google.cloud.sql.connector import Connector
 from google.cloud import secretmanager
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, MetaData, Table
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, MetaData, Table, Boolean, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -33,6 +34,76 @@ class TaxExtraction(Base):
     capital_gain_or_loss = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Document(Base):
+    """SQLAlchemy model for documents"""
+    __tablename__ = 'documents'
+
+    # Primary key - UUID as string
+    id = Column(String(36), primary_key=True)
+
+    # Core fields
+    user_id = Column(String(255), nullable=False, index=True)
+    filename = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=False)
+    file_size = Column(Integer, nullable=False)
+
+    # GCS paths
+    gcs_path = Column(Text, nullable=True)
+    redacted_path = Column(Text, nullable=True)
+    vault_path = Column(Text, nullable=True)
+
+    # Status fields
+    status = Column(String(50), nullable=False, default='uploaded', index=True)
+    extraction_status = Column(String(50), nullable=False, default='not_started', index=True)
+
+    # Redaction metadata
+    pii_count = Column(Integer, nullable=True)
+    validation = Column(JSONB, nullable=True)
+    files_deleted = Column(Boolean, nullable=True, default=False)
+    failure_reason = Column(Text, nullable=True)
+    deletion_errors = Column(JSONB, nullable=True)
+    deleted_files = Column(JSONB, nullable=True)
+
+    # Extraction linkage
+    extraction_record_id = Column(Integer, nullable=True)
+    extracted_fields = Column(JSONB, nullable=True)
+    extraction_error = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        """Convert model to dictionary for API compatibility"""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "filename": self.filename,
+            "content_type": self.content_type,
+            "file_size": self.file_size,
+            "gcs_path": self.gcs_path,
+            "redacted_path": self.redacted_path,
+            "vault_path": self.vault_path,
+            "status": self.status,
+            "extraction_status": self.extraction_status,
+            "pii_count": self.pii_count,
+            "validation": self.validation,
+            "files_deleted": self.files_deleted,
+            "failure_reason": self.failure_reason,
+            "deletion_errors": self.deletion_errors,
+            "deleted_files": self.deleted_files,
+            "extraction_record_id": self.extraction_record_id,
+            "extracted_fields": self.extracted_fields,
+            "extraction_error": self.extraction_error,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "rejected_at": self.rejected_at.isoformat() if self.rejected_at else None,
+        }
 
 
 class DatabaseService:
@@ -334,3 +405,174 @@ class DatabaseService:
             "extracted_at": extraction.created_at.isoformat() if extraction.created_at else None,
             "updated_at": extraction.updated_at.isoformat() if extraction.updated_at else None
         }
+
+    # Document CRUD Operations
+
+    def create_document(
+        self,
+        doc_id: str,
+        user_id: str,
+        filename: str,
+        gcs_path: str,
+        file_size: int,
+        content_type: str
+    ) -> Document:
+        """
+        Create a new document record
+
+        Args:
+            doc_id: Unique document identifier (UUID)
+            user_id: User identifier
+            filename: Original filename
+            gcs_path: GCS path to uploaded file
+            file_size: File size in bytes
+            content_type: MIME type
+
+        Returns:
+            Created Document object
+        """
+        session = self.get_session()
+        try:
+            document = Document(
+                id=doc_id,
+                user_id=user_id,
+                filename=filename,
+                gcs_path=gcs_path,
+                file_size=file_size,
+                content_type=content_type,
+                status='uploaded',
+                extraction_status='not_started'
+            )
+
+            session.add(document)
+            session.commit()
+            session.refresh(document)
+
+            logger.info(f"Created document record: {doc_id}")
+            return document
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to create document: {e}")
+            raise
+        finally:
+            session.close()
+
+    def get_document(self, doc_id: str) -> Optional[Document]:
+        """Get document by ID"""
+        session = self.get_session()
+        try:
+            document = session.query(Document).filter(
+                Document.id == doc_id
+            ).first()
+            return document
+        finally:
+            session.close()
+
+    def get_documents_by_user(self, user_id: str) -> list:
+        """Get all documents for a user"""
+        session = self.get_session()
+        try:
+            documents = session.query(Document).filter(
+                Document.user_id == user_id
+            ).order_by(Document.created_at.desc()).all()
+            return documents
+        finally:
+            session.close()
+
+    def get_all_documents(self) -> list:
+        """Get all documents (for admin/maintenance)"""
+        session = self.get_session()
+        try:
+            documents = session.query(Document).order_by(
+                Document.created_at.desc()
+            ).all()
+            return documents
+        finally:
+            session.close()
+
+    def update_document(
+        self,
+        doc_id: str,
+        **kwargs
+    ) -> Optional[Document]:
+        """
+        Update document record
+
+        Args:
+            doc_id: Document identifier
+            **kwargs: Fields to update
+
+        Returns:
+            Updated Document object or None if not found
+        """
+        session = self.get_session()
+        try:
+            document = session.query(Document).filter(
+                Document.id == doc_id
+            ).first()
+
+            if not document:
+                return None
+
+            for key, value in kwargs.items():
+                if hasattr(document, key):
+                    setattr(document, key, value)
+
+            document.updated_at = datetime.utcnow()
+            session.commit()
+            session.refresh(document)
+            logger.info(f"Updated document: {doc_id}")
+            return document
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to update document: {e}")
+            raise
+        finally:
+            session.close()
+
+    def update_document_status(
+        self,
+        doc_id: str,
+        status: str
+    ) -> Optional[Document]:
+        """Update document status (convenience method)"""
+        return self.update_document(doc_id, status=status)
+
+    def delete_document(self, doc_id: str) -> bool:
+        """Delete document by ID"""
+        session = self.get_session()
+        try:
+            document = session.query(Document).filter(
+                Document.id == doc_id
+            ).first()
+
+            if not document:
+                return False
+
+            session.delete(document)
+            session.commit()
+            logger.info(f"Deleted document: {doc_id}")
+            return True
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to delete document: {e}")
+            raise
+        finally:
+            session.close()
+
+    # Helper methods for API compatibility (return dicts)
+
+    def get_document_dict(self, doc_id: str) -> Optional[Dict[str, Any]]:
+        """Get document as dictionary (API compatibility)"""
+        document = self.get_document(doc_id)
+        return document.to_dict() if document else None
+
+    def get_documents_by_user_dict(self, user_id: str) -> list:
+        """Get user's documents as dictionaries (API compatibility)"""
+        documents = self.get_documents_by_user(user_id)
+        return [doc.to_dict() for doc in documents]
+
+    def get_all_documents_dict(self) -> list:
+        """Get all documents as dictionaries (API compatibility)"""
+        documents = self.get_all_documents()
+        return [doc.to_dict() for doc in documents]

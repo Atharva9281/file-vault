@@ -38,10 +38,9 @@ async def preview_document(
         HTTPException: If document not found or user not authorized
     """
     try:
-        from app.storage import document_store
-
-        # Get document from store
-        document = document_store.get_document(document_id)
+        # Get document from database
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -159,12 +158,12 @@ async def approve_document(
         HTTPException: If document not found or user not authorized
     """
     try:
-        from app.storage import document_store
         from app.config import settings
         from datetime import datetime
 
         # Get document
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -227,7 +226,7 @@ async def approve_document(
             warnings.append(warning)
 
         # Update document
-        document_store.update_document(document_id, {
+        database_service.update_document(document_id, **{
             "status": "approved",
             "vault_path": vault_path,
             "approved_at": datetime.utcnow().isoformat(),
@@ -315,10 +314,8 @@ async def extract_and_store_fields(
         audit_logger: Audit logging service instance
     """
     try:
-        from app.storage import document_store
-
         # Update status to extracting
-        document_store.update_document(doc_id, {
+        database_service.update_document(doc_id, **{
             "extraction_status": "extracting",
             "updated_at": datetime.utcnow().isoformat()
         })
@@ -359,7 +356,7 @@ async def extract_and_store_fields(
             )
 
         # Update document status
-        document_store.update_document(doc_id, {
+        database_service.update_document(doc_id, **{
             "extraction_status": "completed",
             "extraction_record_id": record_id,
             "extracted_fields": extracted_fields,
@@ -378,8 +375,7 @@ async def extract_and_store_fields(
 
         # Update status to failed
         try:
-            from app.storage import document_store
-            document_store.update_document(doc_id, {
+            database_service.update_document(doc_id, **{
                 "extraction_status": "failed",
                 "extraction_error": str(e),
                 "updated_at": datetime.utcnow().isoformat()
@@ -412,11 +408,11 @@ async def reject_document(
         HTTPException: If document not found or user not authorized
     """
     try:
-        from app.storage import document_store
         from datetime import datetime
 
         # Get document
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -481,7 +477,7 @@ async def reject_document(
                 errors.append(warning)
 
         # Update document status even if some deletions failed
-        document_store.update_document(document_id, {
+        database_service.update_document(document_id, **{
             "status": "rejected",
             "rejected_at": datetime.utcnow().isoformat(),
             "deletion_errors": errors if errors else None,
@@ -561,10 +557,9 @@ async def download_document(
         HTTPException: If document not found or not approved
     """
     try:
-        from app.storage import document_store
-
         # Get document
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -673,10 +668,9 @@ async def get_extraction(
         HTTPException: If document not found or user not authorized
     """
     try:
-        from app.storage import document_store
-
         # Get document
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(

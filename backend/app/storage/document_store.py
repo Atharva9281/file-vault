@@ -243,7 +243,8 @@ def sync_from_gcs(storage_client, staging_bucket_name: str, vault_bucket_name: s
             "file_size": metadata_blob.size,
             "content_type": metadata_blob.content_type or "application/octet-stream",
             "created_at": metadata_blob.time_created.isoformat() if metadata_blob.time_created else datetime.utcnow().isoformat(),
-            "updated_at": metadata_blob.updated.isoformat() if metadata_blob.updated else datetime.utcnow().isoformat()
+            "updated_at": metadata_blob.updated.isoformat() if metadata_blob.updated else datetime.utcnow().isoformat(),
+            "extraction_status": "not_started"  # Initialize extraction status for synced documents
         }
 
         # Add redacted_path if it exists
@@ -291,7 +292,8 @@ def sync_from_gcs(storage_client, staging_bucket_name: str, vault_bucket_name: s
                     "content_type": blob.content_type or "application/pdf",
                     "created_at": blob.time_created.isoformat() if blob.time_created else datetime.utcnow().isoformat(),
                     "updated_at": blob.updated.isoformat() if blob.updated else datetime.utcnow().isoformat(),
-                    "approved_at": blob.updated.isoformat() if blob.updated else datetime.utcnow().isoformat()
+                    "approved_at": blob.updated.isoformat() if blob.updated else datetime.utcnow().isoformat(),
+                    "extraction_status": "completed"  # Assume extraction completed for approved vault documents
                 }
 
                 _documents[doc_id] = document

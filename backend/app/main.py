@@ -15,7 +15,6 @@ from app.services.storage_service import StorageService
 from app.services.database_service import DatabaseService
 from app.services.extraction_service import ExtractionService
 from app.services.logging_service import AuditLoggingService
-from app.storage import document_store
 
 # Set Google Cloud credentials from settings (only for local development)
 # Cloud Run uses the service account automatically, so this is only needed locally
@@ -117,15 +116,6 @@ async def startup_event():
         logger.info(f"  - Document AI Location: {settings.DOCUMENT_AI_LOCATION}")
         logger.info(f"  - Database Instance: {settings.DB_INSTANCE_NAME}")
         logger.info(f"  - Database Name: {settings.DB_NAME}")
-
-        # Sync documents from GCS (both staging and vault)
-        storage_client = storage.Client(project=settings.PROJECT_ID)
-        synced_count = document_store.sync_from_gcs(
-            storage_client,
-            settings.STAGING_BUCKET,
-            settings.VAULT_BUCKET
-        )
-        logger.info(f"✓ Synced {synced_count} documents from GCS buckets (staging + vault)")
 
         # Initialize database connection
         logger.info("Initializing database connection...")

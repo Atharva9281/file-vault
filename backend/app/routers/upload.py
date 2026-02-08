@@ -9,14 +9,13 @@ from app.auth import get_current_user
 from app.config import settings
 from app.utils.validators import validate_upload_file, sanitize_filename
 from app.services.storage_service import StorageService
-from app.storage import document_store
 import traceback
 
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 
-def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, storage_service, audit_logger=None):
+def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, storage_service, database_service, audit_logger=None):
     """
     Background task to process redaction pipeline.
     Runs OCR → PII detection → PDF redaction → Validation.
@@ -26,11 +25,12 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
         gcs_input_path: GCS path to original file
         redaction_service: RedactionService instance
         storage_service: StorageService instance for file cleanup
+        database_service: DatabaseService instance for document storage
         audit_logger: AuditLoggingService instance for logging
     """
     try:
         # Get document info
-        document = document_store.get_document(doc_id)
+        document = database_service.get_document_dict(doc_id)
         user_id = document["user_id"] if document else "unknown"
         filename = document["filename"] if document else "unknown"
 
@@ -43,7 +43,7 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
             )
 
         # Update status to 'redacting'
-        document_store.update_document_status(doc_id, "redacting")
+        database_service.update_document_status(doc_id, "redacting")
 
         # Generate output path
         gcs_output_path = gcs_input_path.replace("_original_", "_redacted_")
@@ -81,7 +81,7 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
         # Check if validation passed
         if validation["is_clean"]:
             # SUCCESS: Redaction is safe
-            document_store.update_document(doc_id, {
+            database_service.update_document(doc_id, **{
                 "redacted_path": redacted_path,
                 "status": "redacted",
                 "pii_count": len(pii_findings),
@@ -109,7 +109,7 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
                 pass
 
             # Update document status
-            document_store.update_document(doc_id, {
+            database_service.update_document(doc_id, **{
                 "status": "redaction_failed",
                 "pii_count": len(pii_findings),
                 "validation": validation,
@@ -137,7 +137,7 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
             pass
 
         # Update status to failed
-        document_store.update_document(doc_id, {
+        database_service.update_document(doc_id, **{
             "status": "redaction_failed",
             "files_deleted": True,
             "failure_reason": f"Error during redaction: {str(e)}"
@@ -145,7 +145,7 @@ def process_redaction(doc_id: str, gcs_input_path: str, redaction_service, stora
 
         # Log redaction failure
         if audit_logger:
-            document = document_store.get_document(doc_id)
+            document = database_service.get_document_dict(doc_id)
             user_id = document["user_id"] if document else "unknown"
             audit_logger.log_redaction_failed(
                 user_id=user_id,
@@ -207,8 +207,9 @@ async def upload_document(
             content_type=file.content_type
         )
 
-        # Create document record in storage
-        document = document_store.create_document(
+        # Create document record in database
+        database_service = request.app.state.database_service
+        doc_obj = database_service.create_document(
             doc_id=doc_id,
             user_id=user_id,
             filename=safe_filename,
@@ -216,6 +217,7 @@ async def upload_document(
             file_size=file_size,
             content_type=file.content_type or "application/octet-stream"
         )
+        document = doc_obj.to_dict()
 
         # Log upload event
         if request:
@@ -239,6 +241,7 @@ async def upload_document(
                 gcs_path,
                 redaction_service,
                 storage_service,
+                database_service,
                 audit_logger
             )
 
@@ -266,6 +269,7 @@ async def upload_document(
 @router.get("/download-redacted/{document_id}")
 async def download_redacted(
     document_id: str,
+    request: Request,
     user_id: str = Depends(get_current_user)
 ):
     """
@@ -273,6 +277,7 @@ async def download_redacted(
 
     Args:
         document_id: Document identifier
+        request: FastAPI request object
         user_id: Current authenticated user ID
 
     Returns:
@@ -283,7 +288,8 @@ async def download_redacted(
         from datetime import timedelta
 
         # Get document
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(

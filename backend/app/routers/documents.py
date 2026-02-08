@@ -7,25 +7,26 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from google.cloud import storage
 from app.auth import get_current_user
 from app.config import settings
-from app.storage import document_store
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.get("/", response_model=List[dict])
-async def get_documents(user_id: str = Depends(get_current_user)):
+async def get_documents(request: Request, user_id: str = Depends(get_current_user)):
     """
     Get all documents for the current user.
 
     Args:
+        request: FastAPI request object
         user_id: Current authenticated user ID
 
     Returns:
         List of document objects
     """
     try:
-        documents = document_store.get_documents_by_user(user_id)
+        database_service = request.app.state.database_service
+        documents = database_service.get_documents_by_user_dict(user_id)
         return documents
     except Exception as e:
         raise HTTPException(
@@ -55,7 +56,8 @@ async def get_document(
         HTTPException: If document not found or unauthorized
     """
     try:
-        document = document_store.get_document(document_id)
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -89,38 +91,6 @@ async def get_document(
         )
 
 
-@router.post("/sync")
-async def sync_documents_from_gcs(user_id: str = Depends(get_current_user)):
-    """
-    Manually sync documents from GCS bucket.
-    Useful if documents are missing after server restart.
-
-    Args:
-        user_id: Current authenticated user ID (for auth only)
-
-    Returns:
-        Sync status with count of documents synced
-    """
-    try:
-        storage_client = storage.Client(project=settings.PROJECT_ID)
-        synced_count = document_store.sync_from_gcs(
-            storage_client,
-            settings.STAGING_BUCKET,
-            settings.VAULT_BUCKET
-        )
-
-        return {
-            "status": "success",
-            "message": f"Synced {synced_count} documents from GCS buckets (staging + vault)",
-            "synced_count": synced_count
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to sync documents: {str(e)}"
-        )
-
-
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: str,
@@ -128,7 +98,7 @@ async def delete_document(
     user_id: str = Depends(get_current_user)
 ):
     """
-    Delete a document completely (from staging, vault, database, and in-memory store).
+    Delete a document completely (from staging, vault, and database).
 
     Args:
         document_id: Document identifier
@@ -142,8 +112,9 @@ async def delete_document(
         HTTPException: If document not found or unauthorized
     """
     try:
-        # Get document from store
-        document = document_store.get_document(document_id)
+        # Get document from database
+        database_service = request.app.state.database_service
+        document = database_service.get_document_dict(document_id)
 
         if not document:
             raise HTTPException(
@@ -216,15 +187,14 @@ async def delete_document(
             except Exception as e:
                 pass
 
-        # Delete from database (if extraction exists)
+        # Delete tax extraction from database (if exists)
         try:
-            database_service = request.app.state.database_service
             database_service.delete_tax_extraction(document_id)
         except Exception as e:
             pass
 
-        # Delete from in-memory document store
-        document_store.delete_document(document_id)
+        # Delete document from database
+        database_service.delete_document(document_id)
 
         return {
             "status": "success",
