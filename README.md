@@ -46,33 +46,35 @@ A full-stack cloud-native application built with Next.js and FastAPI, deployed o
 ## Tech Stack
 
 ### Frontend
-- **Framework:** Next.js 16 (App Router, React Server Components)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Authentication:** NextAuth.js with Google OAuth
+- **Framework:** Next.js 16.1.3 (App Router, React Server Components)
+- **Runtime:** Node.js 22+ / React 19
+- **Language:** TypeScript 5
+- **Styling:** Tailwind CSS 4
+- **Authentication:** NextAuth.js 5.0 (Google OAuth)
 - **UI Components:** Custom components with Radix UI primitives
-- **PDF Rendering:** react-pdf
+- **PDF Rendering:** react-pdf 10.3
 - **Deployment:** Vercel
 
 ### Backend
-- **Framework:** FastAPI (Python 3.13)
-- **Validation:** Pydantic
-- **Authentication:** JWT tokens (RS256)
-- **Database ORM:** SQLAlchemy
+- **Framework:** FastAPI 0.115+ (Python 3.11)
+- **Validation:** Pydantic 2.10+
+- **Authentication:** JWT tokens (RS256, python-jose)
+- **Database ORM:** SQLAlchemy 2.0+
+- **PDF Processing:** PyMuPDF 1.23+, pikepdf 8.11+
 - **Deployment:** Google Cloud Run
 
 ### Cloud Services (GCP)
-- **Cloud Storage** - Document staging and vault buckets
-- **Document AI** - OCR text extraction with coordinates
-- **Cloud DLP API** - PII detection and classification
-- **Vertex AI (Gemini 2.5 Pro)** - Tax field extraction
-- **Cloud SQL (PostgreSQL)** - Structured data storage
-- **Secret Manager** - Secure credential management
-- **Cloud Logging** - Centralized audit logging
+- **Cloud Storage** (google-cloud-storage 2.14+) - Document staging and vault buckets
+- **Document AI** (google-cloud-documentai 2.24+) - OCR text extraction with coordinates
+- **Cloud DLP API** (google-cloud-dlp 3.15+) - PII detection and classification
+- **Vertex AI** (google-cloud-aiplatform 1.68) - Gemini 2.5 Pro for tax field extraction
+- **Cloud SQL (PostgreSQL)** (cloud-sql-python-connector 1.7+) - Structured data storage
+- **Secret Manager** (google-cloud-secret-manager 2.18+) - Secure credential management
+- **Cloud Logging** (google-cloud-logging 3.10) - Centralized audit logging
 - **Cloud Run** - Serverless backend deployment
 
 ### Infrastructure
-- **Rate Limiting:** Upstash Redis
+- **Rate Limiting:** Upstash Redis (@upstash/ratelimit 2.0+)
 - **Monitoring:** Cloud Logging
 - **IAM:** Service accounts with least-privilege access
 
